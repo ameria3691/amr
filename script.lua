@@ -5,17 +5,16 @@ local UserInputService = game:GetService("UserInputService")
 local VirtualInputManager = pcall(function() return game:GetService("VirtualInputManager") end) and game:GetService("VirtualInputManager") or nil
 local LocalPlayer = Players.LocalPlayer
 
--- الإعدادات والقيم
 local Config = {
 	Reach = false,
 	AI = false,
 	AILock = false,
+	FF_071 = false,
 
 	ReachSize = 10,
 	AIDodgeDist = 28
 }
 
--- متابعة لمس الشاشة الحقيقي من اللعبة نفسها
 local activeScreenTouches = {}
 local lastRealTouchPos = nil
 local lastRealTouchTime = 0
@@ -40,7 +39,6 @@ UserInputService.TouchEnded:Connect(function(touch)
 	lastRealTouchTime = os.clock()
 end)
 
--- إرسال نبضة قفز طبيعية مع فاصل زمني واقعي
 local function sendNativeJumpInput()
 	if VirtualInputManager then
 		pcall(function()
@@ -64,7 +62,6 @@ local function sendNativeJumpInput()
 	end
 end
 
--- تحكم بشاشة الجوال (عصا اللمس اليسرى + سحب النظر باللمس اليمنى)
 local touchStickActive = false
 local lastStickPos = Vector2.new(135, 515)
 local lastLookTouchPos = Vector2.new(520, 260)
@@ -138,7 +135,6 @@ local function driveMobileScreenTouch(myHrp, moveDir, focusWorldPos)
 	end
 end
 
--- التحكم بزر Shift Lock المرتبط بزر Smart AI واستخدامه عند الحاجة فقط
 local shiftLockState = false
 
 local function findShiftLockGuiButton()
@@ -209,8 +205,123 @@ local function setShiftLockEnabled(enableLock)
 end
 
 -- =========================================================
--- فحص الفريق (Team Check) لمنع استهداف أو مضايقة أعضاء الفريق
+-- ميزة FF_071: تغيير الملابس والاسم الظاهر محلياً لك فقط
 -- =========================================================
+local OUTFIT_TAG = "FF_071"
+local savedOutfitState = {
+	ShirtTemplate = nil,
+	PantsTemplate = nil,
+	BodyColors = {},
+	DisplayName = nil,
+	Applied = false
+}
+
+local function captureAndApplyFF071(char)
+	if not char then return end
+
+	if not savedOutfitState.Applied then
+		savedOutfitState.BodyColors = {}
+		local shirt = char:FindFirstChildOfClass("Shirt")
+		local pants = char:FindFirstChildOfClass("Pants")
+		savedOutfitState.ShirtTemplate = shirt and shirt.ShirtTemplate or ""
+		savedOutfitState.PantsTemplate = pants and pants.PantsTemplate or ""
+
+		local hum = char:FindFirstChildWhichIsA("Humanoid")
+		if hum then
+			savedOutfitState.DisplayName = hum.DisplayName
+		end
+
+		for _, part in ipairs(char:GetChildren()) do
+			if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
+				savedOutfitState.BodyColors[part] = part.Color
+			end
+		end
+		savedOutfitState.Applied = true
+	end
+
+	pcall(function()
+		local shirt = char:FindFirstChildOfClass("Shirt")
+		if not shirt then
+			shirt = Instance.new("Shirt")
+			shirt.Name = OUTFIT_TAG .. "_Shirt"
+			shirt.Parent = char
+		end
+		shirt.ShirtTemplate = "rbxassetid://0"
+
+		local pants = char:FindFirstChildOfClass("Pants")
+		if not pants then
+			pants = Instance.new("Pants")
+			pants.Name = OUTFIT_TAG .. "_Pants"
+			pants.Parent = char
+		end
+		pants.PantsTemplate = "rbxassetid://0"
+
+		local primaryCol = Color3.fromRGB(28, 28, 36)
+		local accentCol = Color3.fromRGB(220, 48, 72)
+
+		for _, part in ipairs(char:GetChildren()) do
+			if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
+				local lowerN = string.lower(part.Name)
+				if string.find(lowerN, "head") then
+					part.Color = Color3.fromRGB(242, 198, 168)
+				elseif string.find(lowerN, "torso") or string.find(lowerN, "upper") or string.find(lowerN, "lower") then
+					part.Color = primaryCol
+				else
+					part.Color = accentCol
+				end
+			end
+		end
+
+		local hum = char:FindFirstChildWhichIsA("Humanoid")
+		if hum then
+			hum.DisplayName = OUTFIT_TAG
+		end
+	end)
+end
+
+local function restoreFF071Outfit(char)
+	if not savedOutfitState.Applied then return end
+
+	pcall(function()
+		if char then
+			local shirt = char:FindFirstChildOfClass("Shirt")
+			if shirt and savedOutfitState.ShirtTemplate ~= nil then
+				if savedOutfitState.ShirtTemplate == "" and shirt.Name == (OUTFIT_TAG .. "_Shirt") then
+					shirt:Destroy()
+				else
+					shirt.ShirtTemplate = savedOutfitState.ShirtTemplate
+				end
+			end
+
+			local pants = char:FindFirstChildOfClass("Pants")
+			if pants and savedOutfitState.PantsTemplate ~= nil then
+				if savedOutfitState.PantsTemplate == "" and pants.Name == (OUTFIT_TAG .. "_Pants") then
+					pants:Destroy()
+				else
+					pants.PantsTemplate = savedOutfitState.PantsTemplate
+				end
+			end
+
+			for part, col in pairs(savedOutfitState.BodyColors) do
+				if part and part.Parent then
+					part.Color = col
+				end
+			end
+
+			local hum = char:FindFirstChildWhichIsA("Humanoid")
+			if hum and savedOutfitState.DisplayName then
+				hum.DisplayName = savedOutfitState.DisplayName
+			end
+		end
+	end)
+
+	savedOutfitState.BodyColors = {}
+	savedOutfitState.ShirtTemplate = nil
+	savedOutfitState.PantsTemplate = nil
+	savedOutfitState.DisplayName = nil
+	savedOutfitState.Applied = false
+end
+
 local function isTeammate(plr)
 	if not plr or plr == LocalPlayer then
 		return true
@@ -243,7 +354,6 @@ local function isTeammate(plr)
 	return false
 end
 
--- فحص امتلاك القنبلة وإرجاع أداة القنبلة أو مجسمها إن وجد
 local function findBombObject(char)
 	if not char then return nil end
 
@@ -409,7 +519,6 @@ local function isInSameArena(myChar, myHrp, targetChar, targetHrp)
 	return true
 end
 
--- بناء الواجهة بشكل واضح ومضمون الظهور
 local playerGui = LocalPlayer:WaitForChild("PlayerGui")
 local oldGui = playerGui:FindFirstChild("TimebombLegendUI")
 if oldGui then oldGui:Destroy() end
@@ -418,11 +527,11 @@ local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = "TimebombLegendUI"
 ScreenGui.ResetOnSpawn = false
 ScreenGui.IgnoreGuiInset = true
-ScreenGui.DisplayOrder = 999
+ScreenGui.DisplayOrder = 1000
 ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 ScreenGui.Parent = playerGui
 
-local FULL_HEIGHT = 196
+local FULL_HEIGHT = 244
 local HEADER_HEIGHT = 42
 
 local MainFrame = Instance.new("Frame")
@@ -433,6 +542,7 @@ MainFrame.BackgroundColor3 = Color3.fromRGB(16, 17, 24)
 MainFrame.BorderSizePixel = 0
 MainFrame.Active = true
 MainFrame.Draggable = true
+MainFrame.ClipsDescendants = true
 MainFrame.Visible = true
 MainFrame.ZIndex = 10
 MainFrame.Parent = ScreenGui
@@ -452,7 +562,7 @@ Header.Name = "Header"
 Header.Size = UDim2.new(1, 0, 0, HEADER_HEIGHT)
 Header.BackgroundColor3 = Color3.fromRGB(28, 30, 44)
 Header.BorderSizePixel = 0
-Header.ZIndex = 11
+Header.ZIndex = 12
 Header.Parent = MainFrame
 
 local HeaderCorner = Instance.new("UICorner")
@@ -468,19 +578,19 @@ TitleLabel.TextColor3 = Color3.fromRGB(245, 247, 255)
 TitleLabel.TextXAlignment = Enum.TextXAlignment.Left
 TitleLabel.Font = Enum.Font.GothamBlack
 TitleLabel.TextSize = 13
-TitleLabel.ZIndex = 12
+TitleLabel.ZIndex = 14
 TitleLabel.Parent = Header
 
 local SubLabel = Instance.new("TextLabel")
 SubLabel.Size = UDim2.new(1, -86, 0, 14)
 SubLabel.Position = UDim2.new(0, 12, 0, 24)
 SubLabel.BackgroundTransparency = 1
-SubLabel.Text = "Clean Pass • Anti-Tag • Team Check"
+SubLabel.Text = "Clean Pass • Anti-Tag • FF_071"
 SubLabel.TextColor3 = Color3.fromRGB(135, 145, 185)
 SubLabel.TextXAlignment = Enum.TextXAlignment.Left
 SubLabel.Font = Enum.Font.GothamMedium
 SubLabel.TextSize = 9
-SubLabel.ZIndex = 12
+SubLabel.ZIndex = 14
 SubLabel.Parent = Header
 
 local MinBtn = Instance.new("TextButton")
@@ -491,7 +601,7 @@ MinBtn.Text = "-"
 MinBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
 MinBtn.Font = Enum.Font.GothamBold
 MinBtn.TextSize = 16
-MinBtn.ZIndex = 12
+MinBtn.ZIndex = 15
 MinBtn.Parent = Header
 
 local MinCorner = Instance.new("UICorner")
@@ -506,7 +616,7 @@ CloseBtn.Text = "X"
 CloseBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
 CloseBtn.Font = Enum.Font.GothamBold
 CloseBtn.TextSize = 13
-CloseBtn.ZIndex = 12
+CloseBtn.ZIndex = 15
 CloseBtn.Parent = Header
 
 local CloseCorner = Instance.new("UICorner")
@@ -515,10 +625,11 @@ CloseBtn.Parent = CloseBtn
 
 local Body = Instance.new("Frame")
 Body.Name = "Body"
-Body.Size = UDim2.new(1, -16, 0, FULL_HEIGHT - HEADER_HEIGHT - 10)
+Body.Size = UDim2.new(1, -16, 0, FULL_HEIGHT - HEADER_HEIGHT - 12)
 Body.Position = UDim2.new(0, 8, 0, HEADER_HEIGHT + 6)
 Body.BackgroundTransparency = 1
-Body.ZIndex = 11
+Body.ClipsDescendants = true
+Body.ZIndex = 13
 Body.Parent = MainFrame
 
 local ListLayout = Instance.new("UIListLayout")
@@ -535,7 +646,7 @@ local function createFeatureRow(keyName, order, title, initialState, valueConfig
 	row.BackgroundColor3 = Color3.fromRGB(27, 29, 41)
 	row.BorderSizePixel = 0
 	row.LayoutOrder = order
-	row.ZIndex = 12
+	row.ZIndex = 14
 	row.Parent = Body
 
 	local rowCorner = Instance.new("UICorner")
@@ -559,7 +670,8 @@ local function createFeatureRow(keyName, order, title, initialState, valueConfig
 	toggleBtn.TextColor3 = Color3.fromRGB(250, 250, 255)
 	toggleBtn.Font = Enum.Font.GothamBold
 	toggleBtn.TextSize = 11
-	toggleBtn.ZIndex = 13
+	toggleBtn.Visible = true
+	toggleBtn.ZIndex = 16
 	toggleBtn.Parent = row
 
 	local btnCorner = Instance.new("UICorner")
@@ -594,7 +706,8 @@ local function createFeatureRow(keyName, order, title, initialState, valueConfig
 		minusBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
 		minusBtn.Font = Enum.Font.GothamBlack
 		minusBtn.TextSize = 15
-		minusBtn.ZIndex = 13
+		minusBtn.Visible = true
+		minusBtn.ZIndex = 16
 		minusBtn.Parent = row
 
 		local minusCorner = Instance.new("UICorner")
@@ -610,7 +723,8 @@ local function createFeatureRow(keyName, order, title, initialState, valueConfig
 		valueLabel.TextColor3 = Color3.fromRGB(130, 220, 255)
 		valueLabel.Font = Enum.Font.GothamBold
 		valueLabel.TextSize = 11
-		valueLabel.ZIndex = 13
+		valueLabel.Visible = true
+		valueLabel.ZIndex = 16
 		valueLabel.Parent = row
 
 		local valCorner = Instance.new("UICorner")
@@ -626,7 +740,8 @@ local function createFeatureRow(keyName, order, title, initialState, valueConfig
 		plusBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
 		plusBtn.Font = Enum.Font.GothamBlack
 		plusBtn.TextSize = 15
-		plusBtn.ZIndex = 13
+		plusBtn.Visible = true
+		plusBtn.ZIndex = 16
 		plusBtn.Parent = row
 
 		local plusCorner = Instance.new("UICorner")
@@ -649,7 +764,6 @@ local function createFeatureRow(keyName, order, title, initialState, valueConfig
 	end
 end
 
--- إعادة ضبط الهيتبوكس إلى الحجم الطبيعي الآمن
 local function resetReach()
 	for _, plr in ipairs(Players:GetPlayers()) do
 		if not isTeammate(plr) and plr.Character then
@@ -665,9 +779,6 @@ local function resetReach()
 	end
 end
 
--- =========================================================
--- ذكاء اصطناعي متكامل: تمرير دقيق + منع استلام القنبلة + فحص فريق
--- =========================================================
 local jukePhase = "none"
 local jukeTimer = 0
 local jukeSign = 1
@@ -984,7 +1095,6 @@ local function evaluateDirectionScore(myChar, myHrp, dir, threatHrp, crowdPositi
 	return score
 end
 
--- اختيار أفضل هدف غير زميل في الفريق لتسليم القنبلة بشكل نظيف وسريع
 local function pickBestPassTarget(myChar, myHrp, urgentMode)
 	local bestPlr = nil
 	local bestHrp = nil
@@ -1090,7 +1200,6 @@ local function handleVerticalEnemy(myChar, myHrp, myHum, targetHrp, iHaveBomb, u
 	end
 end
 
--- تمرير القنبلة للعدو بشكل مباشر وسلس دون تعثر أو انحراف مبالغ عند نقطة التلامس
 local function chaseAndPassToTarget(myChar, myHrp, myHum, targetHrp, urgentMode, dt)
 	if handleVerticalEnemy(myChar, myHrp, myHum, targetHrp, true, urgentMode, dt) then
 		return
@@ -1117,7 +1226,6 @@ local function chaseAndPassToTarget(myChar, myHrp, myHum, targetHrp, urgentMode,
 	local moveTargetPos = predictedPos
 
 	if distFlat <= 7.5 then
-		-- عند القرب المباشر: توجيه مباشر وحازم نحو الهدف لضمان التلامس وتسليم القنبلة
 		chosenDir = sanitizeDirection(myChar, myHrp, myHum, directDir)
 		moveTargetPos = targetHrp.Position + flatVel * 0.06
 		currentTurnRate = 17.5
@@ -1149,7 +1257,6 @@ local function chaseAndPassToTarget(myChar, myHrp, myHum, targetHrp, urgentMode,
 		end
 		currentTurnRate = 13.5
 	else
-		-- تموج خفيف جداً في المسافات البعيدة فقط يتلاشى كلما اقترب الخصم
 		if distFlat > 11 and distFlat < 24 and not urgentMode then
 			local weaveScale = math.clamp((distFlat - 11) / 13, 0, 1)
 			local weaveDeg = math.sin(arcPhaseClock * 7.5) * 18 * weaveScale * jukeSign
@@ -1169,52 +1276,35 @@ local function chaseAndPassToTarget(myChar, myHrp, myHum, targetHrp, urgentMode,
 	end
 end
 
--- =========================================================
--- مهارات ومراوغات دفاعية متقدمة لمنع الخصم من تمرير القنبلة إليك
--- =========================================================
 local function buildLegendaryJukeDir(awayDir, bestSafeDir)
 	local sideDir = Vector3.new(-awayDir.Z * jukeSign, 0, awayDir.X * jukeSign)
 	local smoothWave = math.sin(arcPhaseClock * 10.0) * 0.30
 
 	if jukePhase == "bait" then
-		-- تمويه جانبي قصير قبل الكسر لإرباك تقدير الخصم
 		return (sideDir * (0.88 + smoothWave) + bestSafeDir * 0.42 + awayDir * 0.12).Unit
-
 	elseif jukePhase == "snap" then
-		-- كسر حاد وسريع عكس الاتجاه لتفويت محاولة التلامس
 		local oppositeSide = Vector3.new(-awayDir.Z * (-jukeSign), 0, awayDir.X * (-jukeSign))
 		return (oppositeSide * (0.98 - smoothWave) + awayDir * 0.62 + bestSafeDir * 0.28).Unit
-
 	elseif jukePhase == "orbit" then
-		-- مدار هلالي متعرج يغيّر زاوية الاقتراب باستمرار
 		local crescentAngle = 36 * math.sin(arcPhaseClock * 8.2) * jukeSign
 		local curvedSide = rotateFlatVector(sideDir, crescentAngle)
 		return (curvedSide * 0.86 + awayDir * 0.58 + bestSafeDir * 0.26).Unit
-
 	elseif jukePhase == "zig_snap" then
-		-- متعرج سريع متذبذب يصعّب اللحاق أو التمرير المباشر
 		local zigPulse = (math.floor(arcPhaseClock * 8.5) % 2 == 0) and 1 or -1
 		local zigSide = rotateFlatVector(sideDir, 46 * zigPulse)
 		return (zigSide * 0.92 + awayDir * 0.54 + bestSafeDir * 0.24).Unit
-
 	elseif jukePhase == "feint_hook" then
-		-- خطاف تمويهي يميل بزاوية ثم ينعطف بقوة نحو اتجاه آمن
 		local hookAngle = 56 * jukeSign
 		local hookVec = rotateFlatVector(awayDir, hookAngle)
 		return (hookVec * 0.80 + bestSafeDir * 0.64).Unit
-
 	elseif jukePhase == "dash_flank" then
-		-- التفاف جانبي سريع نحو المساحة المفتوحة
 		local flankAngle = 68 * jukeSign + math.cos(arcPhaseClock * 9.0) * 18
 		local flankVec = rotateFlatVector(awayDir, flankAngle)
 		return (flankVec * 0.85 + bestSafeDir * 0.50).Unit
-
 	elseif jukePhase == "backstep_feint" then
-		-- انعطاف قطري خلفي سريع لكسر اندفاع الخصم المندفع نحوك
 		local backAngle = 115 * jukeSign + math.sin(arcPhaseClock * 8.0) * 15
 		local backVec = rotateFlatVector(awayDir, backAngle)
 		return (backVec * 0.86 + bestSafeDir * 0.58).Unit
-
 	else
 		return (bestSafeDir * 0.66 + awayDir * 0.38 + sideDir * (0.56 + smoothWave)).Unit
 	end
@@ -1388,7 +1478,6 @@ local function runSmartAI(myChar, myHrp, myHum, dt)
 			return
 		end
 
-		-- دفاع طارئ ضد تمرير القنبلة عند القرب الشديد أو اقتراب انتهاء مؤقت الخصم
 		if threatHrp and ((bombTimeLeft and bombTimeLeft <= 3.5) or nearestDist < 11.5) then
 			local awayFlat = Vector3.new(myHrp.Position.X - threatHrp.Position.X, 0, myHrp.Position.Z - threatHrp.Position.Z)
 			local awayDir = (awayFlat.Magnitude > 0.05) and awayFlat.Unit or Vector3.new(1, 0, 0)
@@ -1493,7 +1582,6 @@ local function runSmartAI(myChar, myHrp, myHum, dt)
 	end
 end
 
--- أزرار الواجهة والتحكم بالزيادة والنقصان
 createFeatureRow("reach", 1, "Bomb Reach", false, {
 	key = "ReachSize",
 	min = 4,
@@ -1540,6 +1628,24 @@ createFeatureRow("lock", 3, "Lock AI", false, nil, function(state)
 	lockedMoveDir = state and currentMoveDir or nil
 end)
 
+createFeatureRow("ff071", 4, "FF_071", false, nil, function(state)
+	Config.FF_071 = state
+	local myChar = LocalPlayer.Character
+	if state then
+		captureAndApplyFF071(myChar)
+	else
+		restoreFF071Outfit(myChar)
+	end
+end)
+
+LocalPlayer.CharacterAdded:Connect(function(newChar)
+	savedOutfitState.Applied = false
+	if Config.FF_071 then
+		task.wait(0.25)
+		captureAndApplyFF071(newChar)
+	end
+end)
+
 local minimized = false
 MinBtn.MouseButton1Click:Connect(function()
 	minimized = not minimized
@@ -1552,6 +1658,8 @@ CloseBtn.MouseButton1Click:Connect(function()
 	Config.Reach = false
 	Config.AI = false
 	Config.AILock = false
+	Config.FF_071 = false
+	restoreFF071Outfit(LocalPlayer.Character)
 	releaseTouchControls()
 	setShiftLockEnabled(false)
 	resetReach()
@@ -1561,6 +1669,10 @@ end)
 RunService.RenderStepped:Connect(function(dt)
 	local myChar, myHrp, myHum = getCharacterParts(LocalPlayer)
 	if not myChar or not myHrp or not myHum then return end
+
+	if Config.FF_071 then
+		captureAndApplyFF071(myChar)
+	end
 
 	if Config.AI then
 		runSmartAI(myChar, myHrp, myHum, dt)
