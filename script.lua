@@ -4,6 +4,10 @@ local PathfindingService = game:GetService("PathfindingService")
 local UserInputService = game:GetService("UserInputService")
 local VirtualInputManager = pcall(function() return game:GetService("VirtualInputManager") end) and game:GetService("VirtualInputManager") or nil
 local LocalPlayer = Players.LocalPlayer
+local playerGui = LocalPlayer:WaitForChild("PlayerGui")
+
+local oldGui = playerGui:FindFirstChild("TimebombLegendUI")
+if oldGui then oldGui:Destroy() end
 
 local Config = {
 	Reach = false,
@@ -15,6 +19,226 @@ local Config = {
 	AIDodgeDist = 28
 }
 
+-- =========================================================
+-- 1) بناء الواجهة أولاً لضمان ظهور جميع الأزرار دائماً
+-- =========================================================
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "TimebombLegendUI"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.IgnoreGuiInset = true
+ScreenGui.DisplayOrder = 2000
+ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+ScreenGui.Parent = playerGui
+
+local HEADER_HEIGHT = 44
+local ROW_HEIGHT = 42
+local ROW_GAP = 6
+local FULL_HEIGHT = HEADER_HEIGHT + 12 + (4 * ROW_HEIGHT) + (3 * ROW_GAP)
+
+local MainFrame = Instance.new("Frame")
+MainFrame.Name = "MainFrame"
+MainFrame.Size = UDim2.new(0, 280, 0, FULL_HEIGHT)
+MainFrame.Position = UDim2.new(0.24, 0, 0.20, 0)
+MainFrame.BackgroundColor3 = Color3.fromRGB(16, 17, 24)
+MainFrame.BorderSizePixel = 0
+MainFrame.Active = true
+MainFrame.Draggable = true
+MainFrame.ClipsDescendants = true
+MainFrame.Visible = true
+MainFrame.ZIndex = 10
+MainFrame.Parent = ScreenGui
+
+local MainCorner = Instance.new("UICorner")
+MainCorner.CornerRadius = UDim.new(0, 14)
+MainCorner.Parent = MainFrame
+
+local MainStroke = Instance.new("UIStroke")
+MainStroke.Thickness = 1.6
+MainStroke.Color = Color3.fromRGB(95, 110, 255)
+MainStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+MainStroke.Parent = MainFrame
+
+local Header = Instance.new("Frame")
+Header.Name = "Header"
+Header.Size = UDim2.new(1, 0, 0, HEADER_HEIGHT)
+Header.BackgroundColor3 = Color3.fromRGB(28, 30, 44)
+Header.BorderSizePixel = 0
+Header.ZIndex = 12
+Header.Parent = MainFrame
+
+local HeaderCorner = Instance.new("UICorner")
+HeaderCorner.CornerRadius = UDim.new(0, 14)
+HeaderCorner.Parent = Header
+
+local TitleLabel = Instance.new("TextLabel")
+TitleLabel.Size = UDim2.new(1, -84, 0, 18)
+TitleLabel.Position = UDim2.new(0, 12, 0, 5)
+TitleLabel.BackgroundTransparency = 1
+TitleLabel.Text = "TIMEBOMB | FULL PRO AI"
+TitleLabel.TextColor3 = Color3.fromRGB(245, 247, 255)
+TitleLabel.TextXAlignment = Enum.TextXAlignment.Left
+TitleLabel.Font = Enum.Font.GothamBlack
+TitleLabel.TextSize = 13
+TitleLabel.ZIndex = 14
+TitleLabel.Parent = Header
+
+local SubLabel = Instance.new("TextLabel")
+SubLabel.Size = UDim2.new(1, -84, 0, 14)
+SubLabel.Position = UDim2.new(0, 12, 0, 24)
+SubLabel.BackgroundTransparency = 1
+SubLabel.Text = "Team Check • Jukes • Pass • FF_071"
+SubLabel.TextColor3 = Color3.fromRGB(135, 145, 185)
+SubLabel.TextXAlignment = Enum.TextXAlignment.Left
+SubLabel.Font = Enum.Font.GothamMedium
+SubLabel.TextSize = 9
+SubLabel.ZIndex = 14
+SubLabel.Parent = Header
+
+local MinBtn = Instance.new("TextButton")
+MinBtn.Size = UDim2.new(0, 28, 0, 28)
+MinBtn.Position = UDim2.new(1, -66, 0, 8)
+MinBtn.BackgroundColor3 = Color3.fromRGB(48, 52, 74)
+MinBtn.Text = "-"
+MinBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+MinBtn.Font = Enum.Font.GothamBold
+MinBtn.TextSize = 16
+MinBtn.ZIndex = 15
+MinBtn.Parent = Header
+Instance.new("UICorner", MinBtn).CornerRadius = UDim.new(0, 8)
+
+local CloseBtn = Instance.new("TextButton")
+CloseBtn.Size = UDim2.new(0, 28, 0, 28)
+CloseBtn.Position = UDim2.new(1, -34, 0, 8)
+CloseBtn.BackgroundColor3 = Color3.fromRGB(210, 52, 70)
+CloseBtn.Text = "X"
+CloseBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+CloseBtn.Font = Enum.Font.GothamBold
+CloseBtn.TextSize = 13
+CloseBtn.ZIndex = 15
+CloseBtn.Parent = Header
+Instance.new("UICorner", CloseBtn).CornerRadius = UDim.new(0, 8)
+
+local Body = Instance.new("Frame")
+Body.Name = "Body"
+Body.Size = UDim2.new(1, -16, 0, FULL_HEIGHT - HEADER_HEIGHT - 12)
+Body.Position = UDim2.new(0, 8, 0, HEADER_HEIGHT + 6)
+Body.BackgroundTransparency = 1
+Body.ClipsDescendants = true
+Body.ZIndex = 13
+Body.Parent = MainFrame
+
+local ListLayout = Instance.new("UIListLayout")
+ListLayout.Padding = UDim.new(0, ROW_GAP)
+ListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+ListLayout.Parent = Body
+
+local rowRefs = {}
+
+local function createFeatureRow(keyName, order, title, valueConfig, onToggle)
+	local row = Instance.new("Frame")
+	row.Name = keyName .. "Row"
+	row.Size = UDim2.new(1, 0, 0, ROW_HEIGHT)
+	row.BackgroundColor3 = Color3.fromRGB(27, 29, 41)
+	row.BorderSizePixel = 0
+	row.LayoutOrder = order
+	row.ZIndex = 14
+	row.Parent = Body
+	Instance.new("UICorner", row).CornerRadius = UDim.new(0, 10)
+
+	local rowStroke = Instance.new("UIStroke")
+	rowStroke.Thickness = 1
+	rowStroke.Color = Color3.fromRGB(45, 49, 70)
+	rowStroke.Parent = row
+
+	local hasStepper = valueConfig ~= nil
+	local toggleWidth = hasStepper and 130 or 248
+
+	local toggleBtn = Instance.new("TextButton")
+	toggleBtn.Name = keyName .. "Toggle"
+	toggleBtn.Size = UDim2.new(0, toggleWidth, 1, -8)
+	toggleBtn.Position = UDim2.new(0, 4, 0, 4)
+	toggleBtn.BackgroundColor3 = Color3.fromRGB(40, 43, 60)
+	toggleBtn.Text = title .. " : OFF"
+	toggleBtn.TextColor3 = Color3.fromRGB(250, 250, 255)
+	toggleBtn.Font = Enum.Font.GothamBold
+	toggleBtn.TextSize = 11
+	toggleBtn.Visible = true
+	toggleBtn.ZIndex = 16
+	toggleBtn.Parent = row
+	Instance.new("UICorner", toggleBtn).CornerRadius = UDim.new(0, 8)
+
+	local state = false
+	local function setState(newState)
+		state = newState
+		toggleBtn.Text = title .. (state and " : ON" or " : OFF")
+		toggleBtn.BackgroundColor3 = state and Color3.fromRGB(28, 155, 95) or Color3.fromRGB(40, 43, 60)
+		rowStroke.Color = state and Color3.fromRGB(45, 200, 125) or Color3.fromRGB(45, 49, 70)
+		onToggle(state)
+	end
+
+	toggleBtn.MouseButton1Click:Connect(function()
+		setState(not state)
+	end)
+
+	rowRefs[keyName] = { button = toggleBtn, setState = setState }
+
+	if hasStepper then
+		local minusBtn = Instance.new("TextButton")
+		minusBtn.Name = keyName .. "Minus"
+		minusBtn.Size = UDim2.new(0, 28, 1, -8)
+		minusBtn.Position = UDim2.new(0, 138, 0, 4)
+		minusBtn.BackgroundColor3 = Color3.fromRGB(58, 62, 86)
+		minusBtn.Text = "-"
+		minusBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+		minusBtn.Font = Enum.Font.GothamBlack
+		minusBtn.TextSize = 15
+		minusBtn.Visible = true
+		minusBtn.ZIndex = 16
+		minusBtn.Parent = row
+		Instance.new("UICorner", minusBtn).CornerRadius = UDim.new(0, 8)
+
+		local valLabel = Instance.new("TextLabel")
+		valLabel.Name = keyName .. "Value"
+		valLabel.Size = UDim2.new(0, 52, 1, -8)
+		valLabel.Position = UDim2.new(0, 168, 0, 4)
+		valLabel.BackgroundColor3 = Color3.fromRGB(19, 21, 30)
+		valLabel.Text = tostring(Config[valueConfig.key])
+		valLabel.TextColor3 = Color3.fromRGB(130, 220, 255)
+		valLabel.Font = Enum.Font.GothamBold
+		valLabel.TextSize = 11
+		valLabel.Visible = true
+		valLabel.ZIndex = 16
+		valLabel.Parent = row
+		Instance.new("UICorner", valLabel).CornerRadius = UDim.new(0, 8)
+
+		local plusBtn = Instance.new("TextButton")
+		plusBtn.Name = keyName .. "Plus"
+		plusBtn.Size = UDim2.new(0, 28, 1, -8)
+		plusBtn.Position = UDim2.new(0, 222, 0, 4)
+		plusBtn.BackgroundColor3 = Color3.fromRGB(78, 92, 235)
+		plusBtn.Text = "+"
+		plusBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+		plusBtn.Font = Enum.Font.GothamBlack
+		plusBtn.TextSize = 15
+		plusBtn.Visible = true
+		plusBtn.ZIndex = 16
+		plusBtn.Parent = row
+		Instance.new("UICorner", plusBtn).CornerRadius = UDim.new(0, 8)
+
+		local function stepVal(delta)
+			local v = math.clamp(Config[valueConfig.key] + delta, valueConfig.min, valueConfig.max)
+			Config[valueConfig.key] = v
+			valLabel.Text = tostring(v)
+		end
+
+		minusBtn.MouseButton1Click:Connect(function() stepVal(-valueConfig.step) end)
+		plusBtn.MouseButton1Click:Connect(function() stepVal(valueConfig.step) end)
+	end
+end
+
+-- =========================================================
+-- 2) متابعة لمس الشاشة الحقيقي والتحكم باللمس والقفز وShift Lock
+-- =========================================================
 local activeScreenTouches = {}
 local lastRealTouchPos = nil
 local lastRealTouchTime = 0
@@ -40,26 +264,25 @@ UserInputService.TouchEnded:Connect(function(touch)
 end)
 
 local function sendNativeJumpInput()
-	if VirtualInputManager then
-		pcall(function()
-			if typeof(VirtualInputManager.SendTouchInput) == "function" then
-				local jumpBtnPos = Vector2.new(620, 470)
-				VirtualInputManager:SendTouchInput(2, Enum.UserInputState.Begin, jumpBtnPos, 0)
-				task.delay(0.08, function()
-					pcall(function()
-						VirtualInputManager:SendTouchInput(2, Enum.UserInputState.End, jumpBtnPos, 0)
-					end)
+	if not VirtualInputManager then return end
+	pcall(function()
+		if typeof(VirtualInputManager.SendTouchInput) == "function" then
+			local jumpBtnPos = Vector2.new(620, 470)
+			VirtualInputManager:SendTouchInput(2, Enum.UserInputState.Begin, jumpBtnPos, 0)
+			task.delay(0.08, function()
+				pcall(function()
+					VirtualInputManager:SendTouchInput(2, Enum.UserInputState.End, jumpBtnPos, 0)
 				end)
-			else
-				VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.Space, false, game)
-				task.delay(0.08, function()
-					pcall(function()
-						VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.Space, false, game)
-					end)
+			end)
+		else
+			VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.Space, false, game)
+			task.delay(0.08, function()
+				pcall(function()
+					VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.Space, false, game)
 				end)
-			end
-		end)
-	end
+			end)
+		end
+	end)
 end
 
 local touchStickActive = false
@@ -205,123 +428,8 @@ local function setShiftLockEnabled(enableLock)
 end
 
 -- =========================================================
--- ميزة FF_071: تغيير الملابس والاسم الظاهر محلياً لك فقط
+-- 3) فحص الفريق والساحة والقنبلة واللاعبين
 -- =========================================================
-local OUTFIT_TAG = "FF_071"
-local savedOutfitState = {
-	ShirtTemplate = nil,
-	PantsTemplate = nil,
-	BodyColors = {},
-	DisplayName = nil,
-	Applied = false
-}
-
-local function captureAndApplyFF071(char)
-	if not char then return end
-
-	if not savedOutfitState.Applied then
-		savedOutfitState.BodyColors = {}
-		local shirt = char:FindFirstChildOfClass("Shirt")
-		local pants = char:FindFirstChildOfClass("Pants")
-		savedOutfitState.ShirtTemplate = shirt and shirt.ShirtTemplate or ""
-		savedOutfitState.PantsTemplate = pants and pants.PantsTemplate or ""
-
-		local hum = char:FindFirstChildWhichIsA("Humanoid")
-		if hum then
-			savedOutfitState.DisplayName = hum.DisplayName
-		end
-
-		for _, part in ipairs(char:GetChildren()) do
-			if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
-				savedOutfitState.BodyColors[part] = part.Color
-			end
-		end
-		savedOutfitState.Applied = true
-	end
-
-	pcall(function()
-		local shirt = char:FindFirstChildOfClass("Shirt")
-		if not shirt then
-			shirt = Instance.new("Shirt")
-			shirt.Name = OUTFIT_TAG .. "_Shirt"
-			shirt.Parent = char
-		end
-		shirt.ShirtTemplate = "rbxassetid://0"
-
-		local pants = char:FindFirstChildOfClass("Pants")
-		if not pants then
-			pants = Instance.new("Pants")
-			pants.Name = OUTFIT_TAG .. "_Pants"
-			pants.Parent = char
-		end
-		pants.PantsTemplate = "rbxassetid://0"
-
-		local primaryCol = Color3.fromRGB(28, 28, 36)
-		local accentCol = Color3.fromRGB(220, 48, 72)
-
-		for _, part in ipairs(char:GetChildren()) do
-			if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
-				local lowerN = string.lower(part.Name)
-				if string.find(lowerN, "head") then
-					part.Color = Color3.fromRGB(242, 198, 168)
-				elseif string.find(lowerN, "torso") or string.find(lowerN, "upper") or string.find(lowerN, "lower") then
-					part.Color = primaryCol
-				else
-					part.Color = accentCol
-				end
-			end
-		end
-
-		local hum = char:FindFirstChildWhichIsA("Humanoid")
-		if hum then
-			hum.DisplayName = OUTFIT_TAG
-		end
-	end)
-end
-
-local function restoreFF071Outfit(char)
-	if not savedOutfitState.Applied then return end
-
-	pcall(function()
-		if char then
-			local shirt = char:FindFirstChildOfClass("Shirt")
-			if shirt and savedOutfitState.ShirtTemplate ~= nil then
-				if savedOutfitState.ShirtTemplate == "" and shirt.Name == (OUTFIT_TAG .. "_Shirt") then
-					shirt:Destroy()
-				else
-					shirt.ShirtTemplate = savedOutfitState.ShirtTemplate
-				end
-			end
-
-			local pants = char:FindFirstChildOfClass("Pants")
-			if pants and savedOutfitState.PantsTemplate ~= nil then
-				if savedOutfitState.PantsTemplate == "" and pants.Name == (OUTFIT_TAG .. "_Pants") then
-					pants:Destroy()
-				else
-					pants.PantsTemplate = savedOutfitState.PantsTemplate
-				end
-			end
-
-			for part, col in pairs(savedOutfitState.BodyColors) do
-				if part and part.Parent then
-					part.Color = col
-				end
-			end
-
-			local hum = char:FindFirstChildWhichIsA("Humanoid")
-			if hum and savedOutfitState.DisplayName then
-				hum.DisplayName = savedOutfitState.DisplayName
-			end
-		end
-	end)
-
-	savedOutfitState.BodyColors = {}
-	savedOutfitState.ShirtTemplate = nil
-	savedOutfitState.PantsTemplate = nil
-	savedOutfitState.DisplayName = nil
-	savedOutfitState.Applied = false
-end
-
 local function isTeammate(plr)
 	if not plr or plr == LocalPlayer then
 		return true
@@ -519,266 +627,98 @@ local function isInSameArena(myChar, myHrp, targetChar, targetHrp)
 	return true
 end
 
-local playerGui = LocalPlayer:WaitForChild("PlayerGui")
-local oldGui = playerGui:FindFirstChild("TimebombLegendUI")
-if oldGui then oldGui:Destroy() end
+-- =========================================================
+-- 4) ميزة FF_071: تغيير الملابس والاسم الظاهر محلياً لك فقط
+-- =========================================================
+local savedOutfit = {
+	Shirt = nil,
+	Pants = nil,
+	DisplayName = nil,
+	Colors = {},
+	Saved = false
+}
 
-local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "TimebombLegendUI"
-ScreenGui.ResetOnSpawn = false
-ScreenGui.IgnoreGuiInset = true
-ScreenGui.DisplayOrder = 1000
-ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-ScreenGui.Parent = playerGui
-
-local FULL_HEIGHT = 244
-local HEADER_HEIGHT = 42
-
-local MainFrame = Instance.new("Frame")
-MainFrame.Name = "MainFrame"
-MainFrame.Size = UDim2.new(0, 276, 0, FULL_HEIGHT)
-MainFrame.Position = UDim2.new(0.05, 0, 0.2, 0)
-MainFrame.BackgroundColor3 = Color3.fromRGB(16, 17, 24)
-MainFrame.BorderSizePixel = 0
-MainFrame.Active = true
-MainFrame.Draggable = true
-MainFrame.ClipsDescendants = true
-MainFrame.Visible = true
-MainFrame.ZIndex = 10
-MainFrame.Parent = ScreenGui
-
-local MainCorner = Instance.new("UICorner")
-MainCorner.CornerRadius = UDim.new(0, 14)
-MainCorner.Parent = MainFrame
-
-local MainStroke = Instance.new("UIStroke")
-MainStroke.Thickness = 1.6
-MainStroke.Color = Color3.fromRGB(95, 110, 255)
-MainStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-MainStroke.Parent = MainFrame
-
-local Header = Instance.new("Frame")
-Header.Name = "Header"
-Header.Size = UDim2.new(1, 0, 0, HEADER_HEIGHT)
-Header.BackgroundColor3 = Color3.fromRGB(28, 30, 44)
-Header.BorderSizePixel = 0
-Header.ZIndex = 12
-Header.Parent = MainFrame
-
-local HeaderCorner = Instance.new("UICorner")
-HeaderCorner.CornerRadius = UDim.new(0, 14)
-HeaderCorner.Parent = Header
-
-local TitleLabel = Instance.new("TextLabel")
-TitleLabel.Size = UDim2.new(1, -86, 0, 18)
-TitleLabel.Position = UDim2.new(0, 12, 0, 5)
-TitleLabel.BackgroundTransparency = 1
-TitleLabel.Text = "TIMEBOMB | ANTI-PASS & JUKES"
-TitleLabel.TextColor3 = Color3.fromRGB(245, 247, 255)
-TitleLabel.TextXAlignment = Enum.TextXAlignment.Left
-TitleLabel.Font = Enum.Font.GothamBlack
-TitleLabel.TextSize = 13
-TitleLabel.ZIndex = 14
-TitleLabel.Parent = Header
-
-local SubLabel = Instance.new("TextLabel")
-SubLabel.Size = UDim2.new(1, -86, 0, 14)
-SubLabel.Position = UDim2.new(0, 12, 0, 24)
-SubLabel.BackgroundTransparency = 1
-SubLabel.Text = "Clean Pass • Anti-Tag • FF_071"
-SubLabel.TextColor3 = Color3.fromRGB(135, 145, 185)
-SubLabel.TextXAlignment = Enum.TextXAlignment.Left
-SubLabel.Font = Enum.Font.GothamMedium
-SubLabel.TextSize = 9
-SubLabel.ZIndex = 14
-SubLabel.Parent = Header
-
-local MinBtn = Instance.new("TextButton")
-MinBtn.Size = UDim2.new(0, 28, 0, 28)
-MinBtn.Position = UDim2.new(1, -66, 0, 7)
-MinBtn.BackgroundColor3 = Color3.fromRGB(48, 52, 74)
-MinBtn.Text = "-"
-MinBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-MinBtn.Font = Enum.Font.GothamBold
-MinBtn.TextSize = 16
-MinBtn.ZIndex = 15
-MinBtn.Parent = Header
-
-local MinCorner = Instance.new("UICorner")
-MinCorner.CornerRadius = UDim.new(0, 8)
-MinCorner.Parent = MinBtn
-
-local CloseBtn = Instance.new("TextButton")
-CloseBtn.Size = UDim2.new(0, 28, 0, 28)
-CloseBtn.Position = UDim2.new(1, -34, 0, 7)
-CloseBtn.BackgroundColor3 = Color3.fromRGB(210, 52, 70)
-CloseBtn.Text = "X"
-CloseBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-CloseBtn.Font = Enum.Font.GothamBold
-CloseBtn.TextSize = 13
-CloseBtn.ZIndex = 15
-CloseBtn.Parent = Header
-
-local CloseCorner = Instance.new("UICorner")
-CloseCorner.CornerRadius = UDim.new(0, 8)
-CloseBtn.Parent = CloseBtn
-
-local Body = Instance.new("Frame")
-Body.Name = "Body"
-Body.Size = UDim2.new(1, -16, 0, FULL_HEIGHT - HEADER_HEIGHT - 12)
-Body.Position = UDim2.new(0, 8, 0, HEADER_HEIGHT + 6)
-Body.BackgroundTransparency = 1
-Body.ClipsDescendants = true
-Body.ZIndex = 13
-Body.Parent = MainFrame
-
-local ListLayout = Instance.new("UIListLayout")
-ListLayout.Padding = UDim.new(0, 6)
-ListLayout.SortOrder = Enum.SortOrder.LayoutOrder
-ListLayout.Parent = Body
-
-local rowRefs = {}
-
-local function createFeatureRow(keyName, order, title, initialState, valueConfig, onToggle)
-	local row = Instance.new("Frame")
-	row.Name = keyName .. "Row"
-	row.Size = UDim2.new(1, 0, 0, 42)
-	row.BackgroundColor3 = Color3.fromRGB(27, 29, 41)
-	row.BorderSizePixel = 0
-	row.LayoutOrder = order
-	row.ZIndex = 14
-	row.Parent = Body
-
-	local rowCorner = Instance.new("UICorner")
-	rowCorner.CornerRadius = UDim.new(0, 10)
-	rowCorner.Parent = row
-
-	local rowStroke = Instance.new("UIStroke")
-	rowStroke.Thickness = 1
-	rowStroke.Color = Color3.fromRGB(45, 49, 70)
-	rowStroke.Parent = row
-
-	local hasStepper = valueConfig ~= nil
-	local toggleWidth = hasStepper and 128 or 244
-
-	local toggleBtn = Instance.new("TextButton")
-	toggleBtn.Name = keyName .. "Toggle"
-	toggleBtn.Size = UDim2.new(0, toggleWidth, 1, -8)
-	toggleBtn.Position = UDim2.new(0, 4, 0, 4)
-	toggleBtn.BackgroundColor3 = initialState and Color3.fromRGB(28, 155, 95) or Color3.fromRGB(40, 43, 60)
-	toggleBtn.Text = title .. (initialState and " : ON" or " : OFF")
-	toggleBtn.TextColor3 = Color3.fromRGB(250, 250, 255)
-	toggleBtn.Font = Enum.Font.GothamBold
-	toggleBtn.TextSize = 11
-	toggleBtn.Visible = true
-	toggleBtn.ZIndex = 16
-	toggleBtn.Parent = row
-
-	local btnCorner = Instance.new("UICorner")
-	btnCorner.CornerRadius = UDim.new(0, 8)
-	btnCorner.Parent = toggleBtn
-
-	local state = initialState
-	local function setButtonState(newState)
-		state = newState
-		toggleBtn.Text = title .. (state and " : ON" or " : OFF")
-		toggleBtn.BackgroundColor3 = state and Color3.fromRGB(28, 155, 95) or Color3.fromRGB(40, 43, 60)
-		rowStroke.Color = state and Color3.fromRGB(45, 200, 125) or Color3.fromRGB(45, 49, 70)
-		onToggle(state)
-	end
-
-	toggleBtn.MouseButton1Click:Connect(function()
-		setButtonState(not state)
-	end)
-
-	rowRefs[keyName] = {
-		button = toggleBtn,
-		setState = setButtonState
-	}
-
-	if hasStepper then
-		local minusBtn = Instance.new("TextButton")
-		minusBtn.Name = keyName .. "Minus"
-		minusBtn.Size = UDim2.new(0, 28, 1, -8)
-		minusBtn.Position = UDim2.new(0, 136, 0, 4)
-		minusBtn.BackgroundColor3 = Color3.fromRGB(58, 62, 86)
-		minusBtn.Text = "-"
-		minusBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-		minusBtn.Font = Enum.Font.GothamBlack
-		minusBtn.TextSize = 15
-		minusBtn.Visible = true
-		minusBtn.ZIndex = 16
-		minusBtn.Parent = row
-
-		local minusCorner = Instance.new("UICorner")
-		minusCorner.CornerRadius = UDim.new(0, 8)
-		minusCorner.Parent = minusBtn
-
-		local valueLabel = Instance.new("TextLabel")
-		valueLabel.Name = keyName .. "Value"
-		valueLabel.Size = UDim2.new(0, 52, 1, -8)
-		valueLabel.Position = UDim2.new(0, 166, 0, 4)
-		valueLabel.BackgroundColor3 = Color3.fromRGB(19, 21, 30)
-		valueLabel.Text = tostring(Config[valueConfig.key])
-		valueLabel.TextColor3 = Color3.fromRGB(130, 220, 255)
-		valueLabel.Font = Enum.Font.GothamBold
-		valueLabel.TextSize = 11
-		valueLabel.Visible = true
-		valueLabel.ZIndex = 16
-		valueLabel.Parent = row
-
-		local valCorner = Instance.new("UICorner")
-		valCorner.CornerRadius = UDim.new(0, 8)
-		valCorner.Parent = valueLabel
-
-		local plusBtn = Instance.new("TextButton")
-		plusBtn.Name = keyName .. "Plus"
-		plusBtn.Size = UDim2.new(0, 28, 1, -8)
-		plusBtn.Position = UDim2.new(0, 220, 0, 4)
-		plusBtn.BackgroundColor3 = Color3.fromRGB(78, 92, 235)
-		plusBtn.Text = "+"
-		plusBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-		plusBtn.Font = Enum.Font.GothamBlack
-		plusBtn.TextSize = 15
-		plusBtn.Visible = true
-		plusBtn.ZIndex = 16
-		plusBtn.Parent = row
-
-		local plusCorner = Instance.new("UICorner")
-		plusCorner.CornerRadius = UDim.new(0, 8)
-		plusCorner.Parent = plusBtn
-
-		local function updateValue(delta)
-			local nextVal = math.clamp(Config[valueConfig.key] + delta, valueConfig.min, valueConfig.max)
-			Config[valueConfig.key] = nextVal
-			valueLabel.Text = tostring(nextVal)
-		end
-
-		minusBtn.MouseButton1Click:Connect(function()
-			updateValue(-valueConfig.step)
-		end)
-
-		plusBtn.MouseButton1Click:Connect(function()
-			updateValue(valueConfig.step)
-		end)
-	end
-end
-
-local function resetReach()
-	for _, plr in ipairs(Players:GetPlayers()) do
-		if not isTeammate(plr) and plr.Character then
-			local hrp = plr.Character:FindFirstChild("HumanoidRootPart")
-			if hrp then
-				pcall(function()
-					hrp.Size = Vector3.new(2, 2, 1)
-					hrp.Transparency = 1
-					hrp.CanCollide = false
-				end)
+local function applyFF071Local(char)
+	if not char then return end
+	if not savedOutfit.Saved then
+		savedOutfit.Colors = {}
+		local shirt = char:FindFirstChildOfClass("Shirt")
+		local pants = char:FindFirstChildOfClass("Pants")
+		savedOutfit.Shirt = shirt and shirt.ShirtTemplate or ""
+		savedOutfit.Pants = pants and pants.PantsTemplate or ""
+		local hum = char:FindFirstChildWhichIsA("Humanoid")
+		if hum then savedOutfit.DisplayName = hum.DisplayName end
+		for _, p in ipairs(char:GetChildren()) do
+			if p:IsA("BasePart") and p.Name ~= "HumanoidRootPart" then
+				savedOutfit.Colors[p] = p.Color
 			end
 		end
+		savedOutfit.Saved = true
 	end
+
+	pcall(function()
+		local shirt = char:FindFirstChildOfClass("Shirt") or Instance.new("Shirt", char)
+		shirt.Name = "FF_071_Shirt"
+		shirt.ShirtTemplate = "rbxassetid://0"
+
+		local pants = char:FindFirstChildOfClass("Pants") or Instance.new("Pants", char)
+		pants.Name = "FF_071_Pants"
+		pants.PantsTemplate = "rbxassetid://0"
+
+		for _, p in ipairs(char:GetChildren()) do
+			if p:IsA("BasePart") and p.Name ~= "HumanoidRootPart" then
+				local lowerN = string.lower(p.Name)
+				if string.find(lowerN, "head") then
+					p.Color = Color3.fromRGB(240, 198, 168)
+				elseif string.find(lowerN, "torso") or string.find(lowerN, "upper") or string.find(lowerN, "lower") then
+					p.Color = Color3.fromRGB(24, 24, 34)
+				else
+					p.Color = Color3.fromRGB(220, 45, 70)
+				end
+			end
+		end
+
+		local hum = char:FindFirstChildWhichIsA("Humanoid")
+		if hum then hum.DisplayName = "FF_071" end
+	end)
 end
 
+local function restoreFF071Local(char)
+	if not savedOutfit.Saved then return end
+	pcall(function()
+		if char then
+			local shirt = char:FindFirstChildOfClass("Shirt")
+			if shirt then
+				if savedOutfit.Shirt == "" and shirt.Name == "FF_071_Shirt" then
+					shirt:Destroy()
+				elseif savedOutfit.Shirt then
+					shirt.ShirtTemplate = savedOutfit.Shirt
+				end
+			end
+			local pants = char:FindFirstChildOfClass("Pants")
+			if pants then
+				if savedOutfit.Pants == "" and pants.Name == "FF_071_Pants" then
+					pants:Destroy()
+				elseif savedOutfit.Pants then
+					pants.PantsTemplate = savedOutfit.Pants
+				end
+			end
+			for p, col in pairs(savedOutfit.Colors) do
+				if p and p.Parent then p.Color = col end
+			end
+			local hum = char:FindFirstChildWhichIsA("Humanoid")
+			if hum and savedOutfit.DisplayName then
+				hum.DisplayName = savedOutfit.DisplayName
+			end
+		end
+	end)
+	savedOutfit.Colors = {}
+	savedOutfit.Saved = false
+end
+
+-- =========================================================
+-- 5) الذكاء الاصطناعي والمراوغات والتمرير
+-- =========================================================
 local jukePhase = "none"
 local jukeTimer = 0
 local jukeSign = 1
@@ -1582,39 +1522,32 @@ local function runSmartAI(myChar, myHrp, myHum, dt)
 	end
 end
 
-createFeatureRow("reach", 1, "Bomb Reach", false, {
-	key = "ReachSize",
-	min = 4,
-	max = 20,
-	step = 1
-}, function(state)
-	Config.Reach = state
-	if not state then
-		resetReach()
-	end
+-- =========================================================
+-- 6) إنشاء الصفوف والأزرار وربط الأحداث
+-- =========================================================
+createFeatureRow("reach", 1, "Bomb Reach", { key = "ReachSize", min = 4, max = 20, step = 1 }, function(s)
+	Config.Reach = s
 end)
 
-createFeatureRow("ai", 2, "Smart AI", false, {
-	key = "AIDodgeDist",
-	min = 12,
-	max = 60,
-	step = 4
-}, function(state)
-	Config.AI = state
+createFeatureRow("ai", 2, "Smart AI", { key = "AIDodgeDist", min = 12, max = 60, step = 4 }, function(s)
+	Config.AI = s
 	cachedWaypoints = {}
 	jukePhase = "none"
 	releaseTouchControls()
-	local myChar, _, myHum = getCharacterParts(LocalPlayer)
-	if not state then
+	if not s then
 		setShiftLockEnabled(false)
+		if rowRefs.lock then
+			rowRefs.lock.setState(false)
+		end
+		local myChar, _, myHum = getCharacterParts(LocalPlayer)
 		if myChar and myHum then
 			myHum:MoveTo(myChar:GetPivot().Position)
 		end
 	end
 end)
 
-createFeatureRow("lock", 3, "Lock AI", false, nil, function(state)
-	if state and not Config.AI then
+createFeatureRow("lock", 3, "Lock AI", nil, function(s)
+	if s and not Config.AI then
 		Config.AILock = false
 		lockedMoveDir = nil
 		task.defer(function()
@@ -1624,25 +1557,16 @@ createFeatureRow("lock", 3, "Lock AI", false, nil, function(state)
 		end)
 		return
 	end
-	Config.AILock = state
-	lockedMoveDir = state and currentMoveDir or nil
+	Config.AILock = s
+	lockedMoveDir = s and currentMoveDir or nil
 end)
 
-createFeatureRow("ff071", 4, "FF_071", false, nil, function(state)
-	Config.FF_071 = state
-	local myChar = LocalPlayer.Character
-	if state then
-		captureAndApplyFF071(myChar)
+createFeatureRow("ff071", 4, "FF_071", nil, function(s)
+	Config.FF_071 = s
+	if s then
+		applyFF071Local(LocalPlayer.Character)
 	else
-		restoreFF071Outfit(myChar)
-	end
-end)
-
-LocalPlayer.CharacterAdded:Connect(function(newChar)
-	savedOutfitState.Applied = false
-	if Config.FF_071 then
-		task.wait(0.25)
-		captureAndApplyFF071(newChar)
+		restoreFF071Local(LocalPlayer.Character)
 	end
 end)
 
@@ -1651,7 +1575,7 @@ MinBtn.MouseButton1Click:Connect(function()
 	minimized = not minimized
 	Body.Visible = not minimized
 	MinBtn.Text = minimized and "+" or "-"
-	MainFrame.Size = minimized and UDim2.new(0, 276, 0, HEADER_HEIGHT) or UDim2.new(0, 276, 0, FULL_HEIGHT)
+	MainFrame.Size = minimized and UDim2.new(0, 280, 0, HEADER_HEIGHT) or UDim2.new(0, 280, 0, FULL_HEIGHT)
 end)
 
 CloseBtn.MouseButton1Click:Connect(function()
@@ -1659,11 +1583,18 @@ CloseBtn.MouseButton1Click:Connect(function()
 	Config.AI = false
 	Config.AILock = false
 	Config.FF_071 = false
-	restoreFF071Outfit(LocalPlayer.Character)
+	restoreFF071Local(LocalPlayer.Character)
 	releaseTouchControls()
 	setShiftLockEnabled(false)
-	resetReach()
 	ScreenGui:Destroy()
+end)
+
+LocalPlayer.CharacterAdded:Connect(function(newChar)
+	savedOutfit.Saved = false
+	if Config.FF_071 then
+		task.wait(0.25)
+		applyFF071Local(newChar)
+	end
 end)
 
 RunService.RenderStepped:Connect(function(dt)
@@ -1671,7 +1602,7 @@ RunService.RenderStepped:Connect(function(dt)
 	if not myChar or not myHrp or not myHum then return end
 
 	if Config.FF_071 then
-		captureAndApplyFF071(myChar)
+		applyFF071Local(myChar)
 	end
 
 	if Config.AI then
